@@ -1,0 +1,712 @@
+---
+title: "DC Bike Share Analysis"
+subtitle: Ben Derenge | August 8, 2022
+width: 1200
+---
+
+
+
+<div id="load-packages" class="section level1">
+<h1>Load Packages</h1>
+<p>Washington DC has bike station scattered around the city, allowing anyone find a nearby station, take a bike and ride to another station and drop it off. <em>Capital Bikeshare</em> has publicly available data sets from their website <a href="https://ride.capitalbikeshare.com/system-data" class="uri">https://ride.capitalbikeshare.com/system-data</a></p>
+<p>There are dozens of data sets on their site, dating b ack to 2011. To begin, I picked a dataset from the first quarter of 2017.</p>
+<p>Let’s take a look the data</p>
+<pre><code>##   Duration          Start.date            End.date
+## 1      221 2017-01-01 00:00:41 2017-01-01 00:04:23
+## 2     1676 2017-01-01 00:06:53 2017-01-01 00:34:49
+## 3     1356 2017-01-01 00:07:10 2017-01-01 00:29:47
+## 4     1327 2017-01-01 00:07:22 2017-01-01 00:29:30
+## 5     1636 2017-01-01 00:07:36 2017-01-01 00:34:52
+##                                 Start.station               End.station
+## 1                          3rd &amp; Tingey St SE  M St &amp; New Jersey Ave SE
+## 2                            Lincoln Memorial             8th &amp; D St NW
+## 3 Henry Bacon Dr &amp; Lincoln Memorial Circle NW New York Ave &amp; 15th St NW
+## 4 Henry Bacon Dr &amp; Lincoln Memorial Circle NW New York Ave &amp; 15th St NW
+## 5                            Lincoln Memorial             8th &amp; D St NW
+##   Bike.number Member.type
+## 1      W00869      Member
+## 2      W00894      Casual
+## 3      W21945      Casual
+## 4      W20012      Casual
+## 5      W22786      Casual</code></pre>
+<p>We see each row is ride. We are given the following info about each ride:</p>
+<ul>
+<li><p><strong>Duration (minutes)</strong> How many minutes long is the ride</p></li>
+<li><p><strong>Start.Date</strong></p></li>
+<li><p><strong>End.Date</strong></p></li>
+<li><p><strong>Start.station.number</strong> Identifier</p></li>
+<li><p><strong>Start.station</strong></p></li>
+<li><p><strong>End.station.number</strong> Identifier</p></li>
+<li><p><strong>End.station</strong></p></li>
+<li><p><strong>Bike.number</strong> bike Identifier</p></li>
+<li><p><strong>Member.type</strong> Casual or Member</p>
+<p>Looking at the data available, I brainstormed some directions we can go with the data</p></li>
+<li><p>What stations are most/least frequently used?</p></li>
+<li><p>Time series analysis</p>
+<ul>
+<li><p>Any daily patterns appear in the data</p></li>
+<li><p>Different behaviors in different times of each day</p></li>
+<li><p>Seasonal trends</p></li>
+</ul></li>
+<li><p>“Easy Questions”</p>
+<ul>
+<li><p>How many bikes are in the data</p></li>
+<li><p>How many rides are taken each day</p></li>
+<li><p>How many rides per day on average</p></li>
+<li><p>What proportion of rides are taken by members</p></li>
+</ul></li>
+</ul>
+</div>
+<div id="member-type" class="section level1">
+<h1>Member Type</h1>
+<pre class="r"><code>#sum(bike$Duration)
+#hist(bike$Duration)
+
+table(bike$Member.type)</code></pre>
+<pre><code>## 
+## Casual Member 
+## 118076 528434</code></pre>
+<pre class="r"><code>ggplot(bike, aes(x= Member.type, fill = Member.type)) + geom_bar()</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code>#ggplot(bike, aes(x= Member.type, fill = Member.type)) + geom_bar()
+
+bike$dt &lt;- date(as_datetime(bike$End.date))</code></pre>
+<p>From a simple aggregation, we see in Q1 of 2017 118,076 rides were taken by Casual users, and 528,434 by Members. This is a bit surprising to me</p>
+<p>Using the Lubridate package, I converted the date string into a date.</p>
+<pre class="r"><code>mean(date_agg$n)</code></pre>
+<pre><code>## [1] 7104.505</code></pre>
+<pre class="r"><code>ggplot(date_agg, aes(n)) + geom_histogram() + xlab(&quot;Daily Number of Rides&quot;)</code></pre>
+<pre><code>## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>This plot shows the distribution of the daily number of ride. It’s a nice looking distribution, with a mean of 7104.5 rides per day.</p>
+<pre class="r"><code>ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab(&quot;Number of Rides&quot;) + xlab(&quot;Date&quot;) </code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>This time series plot shows a lot of variability. Let’s add a moving average to it.</p>
+<pre class="r"><code>ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab(&quot;Number of Rides&quot;) + xlab(&quot;Date&quot;) + tidyquant::geom_ma(n=6)</code></pre>
+<pre><code>## Registered S3 method overwritten by &#39;quantmod&#39;:
+##   method            from
+##   as.zoo.data.frame zoo</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>Next, I thought to display the rider types on this plot.</p>
+<pre class="r"><code>#aggrgate by date and member type
+#table(bike$Member.type)
+
+bike %&gt;% count(Member.type)</code></pre>
+<pre><code>##   Member.type      n
+## 1      Casual 118076
+## 2      Member 528434</code></pre>
+<pre class="r"><code>date_mem &lt;- bike %&gt;% count(dt, Member.type)
+
+#daily ride by member type
+ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line()</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Generally, there are fewer Casuals riding than Member, which is expected as member outnumber casuals 4 to 1. On 3 days, casuals take rides than members. perhaps there was a promotion, or this is due to chance.</p>
+<p>Let’s add moving averages to this plot</p>
+<pre class="r"><code>ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line() +
+  tidyquant::geom_ma(n=6)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>This plot look pretty messy, too much going. We could remove actual counts and only see the averages, or simply make the averages easier to see.</p>
+<p>Next, I want to make a heatmap to see the busiest day. Using the calendR package,</p>
+<pre class="r"><code>#how many bikes
+n_distinct(bike$Bike.number)</code></pre>
+<pre><code>## [1] 4298</code></pre>
+<pre class="r"><code>d &lt;- as.vector(date_agg$n)
+
+#CalendR plot
+# calendR(year = 2017,
+#         #start = &quot;S&quot;,
+#         start_date = &quot;2017-01-01&quot;, # Custom start date
+#         end_date = &quot;2017-04-01&quot;,
+#         #special.days = 1:91,
+#         special.days = rank(d),
+#         gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+#         special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+#         low.col = &quot;white&quot;)   </code></pre>
+<pre class="r"><code>calendR(year = 2017,
+        #start = &quot;S&quot;,
+        start_date = &quot;2017-01-01&quot;, # Custom start date
+        end_date = &quot;2017-03-31&quot;,
+        #special.days = 1:91,
+        special.days = (90 * d / max(d))[1:90],
+        gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+        special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+        low.col = &quot;white&quot;)   </code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<pre class="r"><code>## most/least poplar locations
+top_loc_end &lt;- bike %&gt;% count(End.station) %&gt;% arrange(desc(n))
+head(top_loc_end,10)</code></pre>
+<pre><code>##                             End.station     n
+## 1       Columbus Circle / Union Station 14660
+## 2  Massachusetts Ave &amp; Dupont Circle NW 10666
+## 3                        15th &amp; P St NW  8879
+## 4             Jefferson Dr &amp; 14th St SW  8411
+## 5                      Lincoln Memorial  7869
+## 6                        14th &amp; V St NW  7289
+## 7                         Thomas Circle  6710
+## 8           New Hampshire Ave &amp; T St NW  6530
+## 9                         5th &amp; K St NW  6154
+## 10                   Jefferson Memorial  5970</code></pre>
+<pre class="r"><code>top_loc_start &lt;- bike %&gt;% count(Start.station) %&gt;% arrange(desc(n))
+head(top_loc_start,10)</code></pre>
+<pre><code>##                                          Start.station     n
+## 1                      Columbus Circle / Union Station 13712
+## 2                 Massachusetts Ave &amp; Dupont Circle NW  9071
+## 3                                       15th &amp; P St NW  8195
+## 4                            Jefferson Dr &amp; 14th St SW  8026
+## 5                                     Lincoln Memorial  7876
+## 6                                        Thomas Circle  7211
+## 7                          New Hampshire Ave &amp; T St NW  6607
+## 8                                       14th &amp; V St NW  6563
+## 9  Eastern Market Metro / Pennsylvania Ave &amp; 7th St SE  5907
+## 10                                       5th &amp; K St NW  5846</code></pre>
+<p>Columbus Circle / Union Station is the most popular starting and ending location.</p>
+</div>
+<div id="most-popular-trips" class="section level1">
+<h1>Most Popular Trips</h1>
+<pre class="r"><code>bike$trip &lt;- stringr::str_c(bike$Start.station, bike$End.station, sep = &quot; to &quot;)
+
+
+trips &lt;- bike %&gt;%
+  count(trip) %&gt;% 
+  arrange(desc(n))
+
+head(trips)</code></pre>
+<pre><code>##                                                                                                             trip
+## 1                                                         Jefferson Dr &amp; 14th St SW to Jefferson Dr &amp; 14th St SW
+## 2                                                               Columbus Circle / Union Station to 8th &amp; F St NE
+## 3                                                               8th &amp; F St NE to Columbus Circle / Union Station
+## 4 Smithsonian-National Mall / Jefferson Dr &amp; 12th St SW to Smithsonian-National Mall / Jefferson Dr &amp; 12th St SW
+## 5                                                                         Lincoln Memorial to Jefferson Memorial
+## 6                                                                  Jefferson Dr &amp; 14th St SW to Lincoln Memorial
+##      n
+## 1 1010
+## 2  995
+## 3  936
+## 4  894
+## 5  848
+## 6  833</code></pre>
+<pre class="r"><code> # t &lt;- bike %&gt;% filter(End.station == &quot;Jefferson Dr &amp; 14th St SW&quot; &amp; Start.station == &quot;Jefferson Dr &amp; 14th St SW&quot;) %&gt;% arrange(desc(Duration) )
+ # 
+ # head(t[,c(1,2,3,5,7,9)],5)</code></pre>
+<p>The most common trip has the same start and end stations: Jefferson Dr. and 14th St SW.</p>
+<pre class="r"><code> # t &lt;- bike %&gt;% filter(End.station == &quot;Jefferson Dr &amp; 14th St SW&quot; &amp; Start.station == &quot;Jefferson Dr &amp; 14th St SW&quot;) %&gt;% arrange(Duration )
+ # 
+ # head(t[,c(1,2,3,5,7,9)],5)</code></pre>
+</div>
+<div id="all-of-2017" class="section level1">
+<h1>All of 2017</h1>
+<p>Let’s add 3 more data sets from the other 3 quarter of 2017.</p>
+<pre class="r"><code>q2 &lt;- read.csv(&quot;~/R/dc bikeshare/2017Q2-capitalbikeshare-tripdata.csv&quot;)
+
+q3 &lt;- read.csv(&quot;~/R/dc bikeshare/2017Q3-capitalbikeshare-tripdata.csv&quot;)
+
+q4 &lt;- read.csv(&quot;~/R/dc bikeshare/2017Q4-capitalbikeshare-tripdata.csv&quot;)
+
+all_data &lt;- bind_rows(`2017Q1.capitalbikeshare.tripdata`,q2,q3,q4)
+
+all_data$dt &lt;- date(as_datetime(all_data$End.date))</code></pre>
+<p>Here are the same plots as above with the extra dates</p>
+<pre class="r"><code>ggplot(date_agg, aes(n)) + geom_histogram() + xlab(&quot;Daily Number of Rides&quot;)</code></pre>
+<pre><code>## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<pre class="r"><code>date_agg &lt;- all_data %&gt;% count(dt)
+#plot(x= date_agg$dt, y=date_agg$n)
+ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab(&quot;Number of Rides&quot;) + xlab(&quot;Date&quot;) </code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-16-2.png" width="672" /></p>
+<pre class="r"><code>ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab(&quot;Number of Rides&quot;) + xlab(&quot;Date&quot;) + tidyquant::geom_ma(n=6)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-16-3.png" width="672" /></p>
+<pre class="r"><code>date_mem &lt;- all_data %&gt;% count(dt, Member.type)
+
+#daily ride by member type
+ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line() +ylab(&quot;Daily Number of Rides&quot;) + xlab(&quot;Date&quot;)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-16-4.png" width="672" /></p>
+<p>The plot above has a lot of information to interpret. It makes me want to analyze the distributions of members vs casuals.</p>
+<pre class="r"><code>ggplot(date_mem, aes(x=n, fill=Member.type)) + geom_histogram(alpha=.6, position = &quot;identity&quot;) + xlab(&quot;Number of Daily Rides&quot;)</code></pre>
+<pre><code>## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
+<pre class="r"><code>date_mem %&gt;% group_by(Member.type) %&gt;% summarise(Mean = mean(n), &quot;Standard Deviation&quot; = sd(n))</code></pre>
+<pre><code>## # A tibble: 2 × 3
+##   Member.type  Mean `Standard Deviation`
+##   &lt;chr&gt;       &lt;dbl&gt;                &lt;dbl&gt;
+## 1 Casual      2683.                2078.
+## 2 Member      7585.                2630.</code></pre>
+<p>How many rides are taken each month?</p>
+<pre class="r"><code>bar &lt;- all_data %&gt;% 
+  group_by(month.name[month(dt)]) %&gt;%
+  count(month(dt)) %&gt;%
+  rename(Month = &quot;month.name[month(dt)]&quot;, M = &quot;month(dt)&quot;) %&gt;%
+  arrange(M) %&gt;%
+  select(Month,n)
+bar</code></pre>
+<pre><code>## # A tibble: 12 × 2
+## # Groups:   Month [12]
+##    Month          n
+##    &lt;chr&gt;      &lt;int&gt;
+##  1 January   174802
+##  2 February  226299
+##  3 March     245387
+##  4 April     365928
+##  5 May       339740
+##  6 June      398690
+##  7 July      397708
+##  8 August    402550
+##  9 September 391341
+## 10 October   384887
+## 11 November  252537
+## 12 December  177908</code></pre>
+<pre class="r"><code>bar$f &lt;- factor(bar$Month, levels = bar$Month)
+ggplot(bar, aes(x=f, y=n, fill = n)) + geom_col() + theme(axis.text.x=element_text(angle=60, hjust=1)) + xlab(&quot;Month&quot;) + ylab(&quot;Number of Rides&quot;) + scale_fill_continuous(high = &quot;#132B43&quot;, low = &quot;#56B1F7&quot;)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+<p>This plot displays the seasonal trend in the data. The summer months see the most rides and the winter months see the least</p>
+</div>
+<div id="calendar" class="section level1">
+<h1>Calendar</h1>
+<pre class="r"><code>d &lt;- as.vector(date_agg$n)
+
+# calendR(year = 2017,
+#         #start = &quot;S&quot;,
+#         start_date = &quot;2017-01-01&quot;, # Custom start date
+#         end_date = &quot;2018-01-01&quot;,
+#         #special.days = 1:91,
+#         special.days =1:366,#nrow(date_mem) * d / max(d),
+#         gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+#         special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+#         low.col = &quot;white&quot;)   
+
+calendR(year = 2017,
+        #start = &quot;S&quot;,
+        start_date = &quot;2017-01-01&quot;, # Custom start date
+        end_date = &quot;2018-01-01&quot;,
+        #special.days = 1:91,
+        special.days =nrow(date_agg) * d / max(d),
+        gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+        special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+        low.col = &quot;white&quot;)   </code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
+</div>
+<div id="ride-durations" class="section level1">
+<h1>Ride Durations</h1>
+<p>Let’s look at how long each ride takes</p>
+<pre class="r"><code>#ggplot(all_data, aes(x=dt, y= Duration)) + geom_point() # takes a long time
+# average duration by date
+duration &lt;- all_data %&gt;%
+  group_by(dt) %&gt;%
+  summarize(length = mean(Duration))
+
+ggplot(duration, aes(x = dt, y = length)) + geom_point() + geom_line() + ylab(&quot;Length of Rides&quot;) + xlab(&quot;Date&quot;)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-20-1.png" width="672" /></p>
+<p>Perhaps rides are also longer on average during the summer summer months.</p>
+<pre class="r"><code>bar &lt;- duration %&gt;% 
+  group_by(month.name[month(dt)]) %&gt;% 
+  summarise(average_length = mean(length)) %&gt;% 
+  rename(Month = &quot;month.name[month(dt)]&quot;) %&gt;% 
+  mutate(Month = factor(Month, levels = month.name)) %&gt;%
+  arrange(Month)
+
+bar</code></pre>
+<pre><code>## # A tibble: 12 × 2
+##    Month     average_length
+##    &lt;fct&gt;              &lt;dbl&gt;
+##  1 January             925.
+##  2 February            997.
+##  3 March              1009.
+##  4 April              1317.
+##  5 May                1180.
+##  6 June               1235.
+##  7 July               1333.
+##  8 August             1171.
+##  9 September          1142.
+## 10 October            1096.
+## 11 November            979.
+## 12 December            846.</code></pre>
+<pre class="r"><code>ggplot(bar, aes(x=Month, y=average_length, fill = average_length)) + geom_col() + theme(axis.text.x=element_text(angle=60, hjust=1)) + xlab(&quot;Month&quot;) + ylab(&quot;Average Lenght of Rides (minutes)&quot;) + scale_fill_continuous(high = &quot;#132B43&quot;, low = &quot;#56B1F7&quot;)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+</div>
+<div id="mapping" class="section level1">
+<h1>Mapping</h1>
+<p>The more recent data sets include latitude and longitude of the station. Let’s try some new packages.</p>
+<pre class="r"><code>map_data &lt;- read.csv(&quot;~/R/dc bikeshare/202207-capitalbikeshare-tripdata.csv&quot;)
+map_data$ended_at &lt;- date(as_datetime(map_data$ended_at))
+map_data &lt;- map_data %&gt;% filter(ended_at == &quot;2022-07-09&quot;)
+#393683 rows, lets aggregate by trip
+#combine start and end
+map_data$trip &lt;- str_c(map_data$start_station_name, &quot; to &quot;, map_data$end_station_name)
+
+#map_data %&gt;% filter(!(is.na(start_station_id)))
+map_data &lt;- map_data %&gt;% drop_na()
+d &lt;- map_data %&gt;% group_by(trip, start_lat, start_lng, end_lat, end_lng) %&gt;% summarise(n=n())</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;trip&#39;, &#39;start_lat&#39;, &#39;start_lng&#39;,
+## &#39;end_lat&#39;. You can override using the `.groups` argument.</code></pre>
+<pre class="r"><code> d1&lt;- d %&gt;% pivot_longer(cols = c(2,4),names_to = &quot;loc&quot;, values_to = &quot;lat&quot;) %&gt;% 
+  pivot_longer(cols = c(2,3), names_to = &quot;loc2&quot;, values_to = &quot;long&quot;)
+
+d1 &lt;- d1 %&gt;%  filter((loc == &quot;start_lat&quot; &amp; loc2 == &quot;start_lng&quot;) | (loc == &quot;end_lat&quot; &amp; loc2 == &quot;end_lng&quot;))
+
+
+p &lt;- ggplot(d1 %&gt;% filter(n &gt;10), aes(x= long, y= lat, size=.1, color = loc, shape = loc2)) + geom_point() +geom_line(aes(group = trip, size = n, alpha=.1),color=&quot;grey&quot;)
+ p</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
+<pre class="r"><code> #ggplotly(p)
+
+max(map_data$start_lat)</code></pre>
+<pre><code>## [1] 39.12583</code></pre>
+<pre class="r"><code>min(map_data$start_lat)</code></pre>
+<pre><code>## [1] 38.78263</code></pre>
+<pre class="r"><code>max(map_data$start_lng)</code></pre>
+<pre><code>## [1] -76.8446</code></pre>
+<pre class="r"><code>min(map_data$start_lng)</code></pre>
+<pre><code>## [1] -77.36842</code></pre>
+<pre class="r"><code>d1 %&gt;% group_by(trip) %&gt;% count()</code></pre>
+<pre><code>## # A tibble: 5,071 × 2
+## # Groups:   trip [5,071]
+##    trip                                                    n
+##    &lt;chr&gt;                                               &lt;int&gt;
+##  1 10th &amp; E St NW to 10th &amp; G St NW                        2
+##  2 10th &amp; E St NW to 14th &amp; G St NW                        2
+##  3 10th &amp; E St NW to 14th &amp; Q St NW                        2
+##  4 10th &amp; E St NW to 14th &amp; V St NW                        2
+##  5 10th &amp; E St NW to 15th &amp; East Capitol St NE             2
+##  6 10th &amp; E St NW to 1st &amp; H St NW                         2
+##  7 10th &amp; E St NW to 1st &amp; M St SE                         2
+##  8 10th &amp; E St NW to 20th &amp; Columbia Rd NW                 2
+##  9 10th &amp; E St NW to 6th St &amp; Indiana Ave NW               2
+## 10 10th &amp; E St NW to Convention Center / 7th &amp; M St NW     2
+## # … with 5,061 more rows
+## # ℹ Use `print(n = ...)` to see more rows</code></pre>
+<pre class="r"><code>drop_na(left_join(trips, d1, by = c(&quot;trip&quot;, &quot;n&quot;)))</code></pre>
+<pre><code>##                                                                         trip n
+## 1                      Adams Mill &amp; Columbia Rd NW to Eckington Pl &amp; Q St NE 4
+## 2                      Adams Mill &amp; Columbia Rd NW to Eckington Pl &amp; Q St NE 4
+## 3                   17th &amp; G St NW to 37th &amp; O St NW / Georgetown University 3
+## 4                   17th &amp; G St NW to 37th &amp; O St NW / Georgetown University 3
+## 5                            22nd &amp; P ST NW to 19th St &amp; Constitution Ave NW 3
+## 6                            22nd &amp; P ST NW to 19th St &amp; Constitution Ave NW 3
+## 7                      10th St &amp; L&#39;Enfant Plaza SW to 4th St &amp; Madison Dr NW 2
+## 8                      10th St &amp; L&#39;Enfant Plaza SW to 4th St &amp; Madison Dr NW 2
+## 9                                           17th &amp; G St NW to 13th &amp; D St NE 2
+## 10                                          17th &amp; G St NW to 13th &amp; D St NE 2
+## 11                            1st &amp; O St NW to 21st St &amp; Pennsylvania Ave NW 2
+## 12                            1st &amp; O St NW to 21st St &amp; Pennsylvania Ave NW 2
+## 13                                            3rd &amp; D St SE to 3rd &amp; H St NW 2
+## 14                                            3rd &amp; D St SE to 3rd &amp; H St NW 2
+## 15                 Calvert &amp; Biltmore St NW to 10th St &amp; Constitution Ave NW 2
+## 16                 Calvert &amp; Biltmore St NW to 10th St &amp; Constitution Ave NW 2
+## 17             Gallaudet / 8th St &amp; Florida Ave NE to 4th St &amp; Madison Dr NW 2
+## 18             Gallaudet / 8th St &amp; Florida Ave NE to 4th St &amp; Madison Dr NW 2
+## 19             Henry Bacon Dr &amp; Lincoln Memorial Circle NW to 11th &amp; S St NW 2
+## 20             Henry Bacon Dr &amp; Lincoln Memorial Circle NW to 11th &amp; S St NW 2
+## 21      Maine Ave &amp; 7th St SW to Henry Bacon Dr &amp; Lincoln Memorial Circle NW 2
+## 22      Maine Ave &amp; 7th St SW to Henry Bacon Dr &amp; Lincoln Memorial Circle NW 2
+## 23                       North Capitol St &amp; F St NW to Maine Ave &amp; 7th St SW 2
+## 24                       North Capitol St &amp; F St NW to Maine Ave &amp; 7th St SW 2
+## 25                                    10th &amp; Florida Ave NW to 6th &amp; H St NE 1
+## 26                                    10th &amp; Florida Ave NW to 6th &amp; H St NE 1
+## 27                                 11th &amp; F St NW to Lamont &amp; Mt Pleasant NW 1
+## 28                                 11th &amp; F St NW to Lamont &amp; Mt Pleasant NW 1
+## 29                  11th &amp; S St NW to 37th &amp; O St NW / Georgetown University 1
+## 30                  11th &amp; S St NW to 37th &amp; O St NW / Georgetown University 1
+## 31                              12th &amp; U St NW to 34th St &amp; Wisconsin Ave NW 1
+## 32                              12th &amp; U St NW to 34th St &amp; Wisconsin Ave NW 1
+## 33      12th St &amp; Pennsylvania Ave SE to Gallaudet / 8th St &amp; Florida Ave NE 1
+## 34      12th St &amp; Pennsylvania Ave SE to Gallaudet / 8th St &amp; Florida Ave NE 1
+## 35                                     13th &amp; H St NE to 14th &amp; Irving St NW 1
+## 36                                     13th &amp; H St NE to 14th &amp; Irving St NW 1
+## 37                              14th &amp; L St NW to Rhode Island Ave &amp; V St NE 1
+## 38                              14th &amp; L St NW to Rhode Island Ave &amp; V St NE 1
+## 39                                      14th &amp; R St NW to Hamlin &amp; 7th St NE 1
+## 40                                      14th &amp; R St NW to Hamlin &amp; 7th St NE 1
+## 41                                           15th &amp; W St NW to 3rd &amp; D St SE 1
+## 42                                           15th &amp; W St NW to 3rd &amp; D St SE 1
+## 43                          15th St &amp; Massachusetts Ave SE to 11th &amp; O St NW 1
+## 44                          15th St &amp; Massachusetts Ave SE to 11th &amp; O St NW 1
+## 45                              18th &amp; R St NW to Rhode Island Ave &amp; V St NE 1
+## 46                              18th &amp; R St NW to Rhode Island Ave &amp; V St NE 1
+## 47                            18th St &amp; Wyoming Ave NW to 3rd &amp; Tingey St SE 1
+## 48                            18th St &amp; Wyoming Ave NW to 3rd &amp; Tingey St SE 1
+## 49                                       1st &amp; H St NW to Jefferson Memorial 1
+## 50                                       1st &amp; H St NW to Jefferson Memorial 1
+## 51                                    1st &amp; H St NW to Maine Ave &amp; 7th St SW 1
+## 52                                    1st &amp; H St NW to Maine Ave &amp; 7th St SW 1
+## 53                                1st &amp; O St NW to Neal St &amp; Trinidad Ave NE 1
+## 54                                1st &amp; O St NW to Neal St &amp; Trinidad Ave NE 1
+## 55                                2nd &amp; G St NE to New York Ave &amp; 15th St NW 1
+## 56                                2nd &amp; G St NE to New York Ave &amp; 15th St NW 1
+## 57                                      34th &amp; Water St NW to 18th &amp; R St NW 1
+## 58                                      34th &amp; Water St NW to 18th &amp; R St NW 1
+## 59                      34th St &amp; Wisconsin Ave NW to 14th St &amp; Spring Rd NW 1
+## 60                      34th St &amp; Wisconsin Ave NW to 14th St &amp; Spring Rd NW 1
+## 61                                    4th &amp; C St SW to Florida Ave &amp; R St NW 1
+## 62                                    4th &amp; C St SW to Florida Ave &amp; R St NW 1
+## 63                4th &amp; East Capitol St NE to New Hampshire Ave &amp; 24th St NW 1
+## 64                4th &amp; East Capitol St NE to New Hampshire Ave &amp; 24th St NW 1
+## 65                                   4th St &amp; Madison Dr NW to 8th &amp; O St NW 1
+## 66                                   4th St &amp; Madison Dr NW to 8th &amp; O St NW 1
+## 67                                         6th &amp; H St NE to Lincoln Memorial 1
+## 68                                         6th &amp; H St NE to Lincoln Memorial 1
+## 69                       6th &amp; H St NE to New Jersey Ave &amp; N St NW/Dunbar HS 1
+## 70                       6th &amp; H St NE to New Jersey Ave &amp; N St NW/Dunbar HS 1
+## 71                          7th &amp; E St SW to Columbus Circle / Union Station 1
+## 72                          7th &amp; E St SW to Columbus Circle / Union Station 1
+## 73                                    7th &amp; E St SW to Maine Ave &amp; 7th St SW 1
+## 74                                    7th &amp; E St SW to Maine Ave &amp; 7th St SW 1
+## 75      7th &amp; F St NW / National Portrait Gallery to Lamont &amp; Mt Pleasant NW 1
+## 76      7th &amp; F St NW / National Portrait Gallery to Lamont &amp; Mt Pleasant NW 1
+## 77      7th &amp; F St NW / National Portrait Gallery to Lamont &amp; Mt Pleasant NW 1
+## 78      7th &amp; F St NW / National Portrait Gallery to Lamont &amp; Mt Pleasant NW 1
+## 79                             7th &amp; R St NW / Shaw Library to 1st &amp; D St SE 1
+## 80                             7th &amp; R St NW / Shaw Library to 1st &amp; D St SE 1
+## 81                    7th &amp; R St NW / Shaw Library to 4th St &amp; Madison Dr NW 1
+## 82                    7th &amp; R St NW / Shaw Library to 4th St &amp; Madison Dr NW 1
+## 83          7th &amp; R St NW / Shaw Library to Hains Point/Buckeye &amp; Ohio Dr SW 1
+## 84          7th &amp; R St NW / Shaw Library to Hains Point/Buckeye &amp; Ohio Dr SW 1
+## 85                7th &amp; R St NW / Shaw Library to North Capitol St &amp; G Pl NE 1
+## 86                7th &amp; R St NW / Shaw Library to North Capitol St &amp; G Pl NE 1
+## 87                    8th &amp; East Capitol St NE to 14th &amp; Rhode Island Ave NW 1
+## 88                    8th &amp; East Capitol St NE to 14th &amp; Rhode Island Ave NW 1
+## 89                                          8th &amp; F St NE to 3rd &amp; Elm St NW 1
+## 90                                          8th &amp; F St NE to 3rd &amp; Elm St NW 1
+## 91                           8th &amp; O St NW to 15th St &amp; Massachusetts Ave SE 1
+## 92                           8th &amp; O St NW to 15th St &amp; Massachusetts Ave SE 1
+## 93  Adams Mill &amp; Columbia Rd NW to Lincoln Park / 13th &amp; East Capitol St NE  1
+## 94  Adams Mill &amp; Columbia Rd NW to Lincoln Park / 13th &amp; East Capitol St NE  1
+## 95                            Anacostia Library to Good Hope Rd &amp; 14th St SE 1
+## 96                            Anacostia Library to Good Hope Rd &amp; 14th St SE 1
+## 97                          C &amp; O Canal &amp; Wisconsin Ave NW to 15th &amp; F St NE 1
+## 98                          C &amp; O Canal &amp; Wisconsin Ave NW to 15th &amp; F St NE 1
+## 99          Clarendon Metro / Wilson Blvd &amp; N Highland St to 23rd &amp; E St NW  1
+## 100         Clarendon Metro / Wilson Blvd &amp; N Highland St to 23rd &amp; E St NW  1
+## 101                               Hamlin &amp; 7th St NE to 14th &amp; Belmont St NW 1
+## 102                               Hamlin &amp; 7th St NE to 14th &amp; Belmont St NW 1
+## 103               Harvard St &amp; Adams Mill Rd NW to 1st &amp; Rhode Island Ave NW 1
+## 104               Harvard St &amp; Adams Mill Rd NW to 1st &amp; Rhode Island Ave NW 1
+## 105                                   Maine Ave &amp; 7th St SW to 3rd &amp; M St NE 1
+## 106                                   Maine Ave &amp; 7th St SW to 3rd &amp; M St NE 1
+## 107                  Maine Ave &amp; 7th St SW to Georgia &amp; New Hampshire Ave NW 1
+## 108                  Maine Ave &amp; 7th St SW to Georgia &amp; New Hampshire Ave NW 1
+## 109                                   Maine Ave &amp; 7th St SW to Thomas Circle 1
+## 110                                   Maine Ave &amp; 7th St SW to Thomas Circle 1
+## 111                Maryland Ave &amp; E St NE to Pennsylvania &amp; Minnesota Ave SE 1
+## 112                Maryland Ave &amp; E St NE to Pennsylvania &amp; Minnesota Ave SE 1
+## 113           Mount Vernon Ave &amp; Bruce St to Mount Vernon Ave &amp; E Nelson Ave 1
+## 114           Mount Vernon Ave &amp; Bruce St to Mount Vernon Ave &amp; E Nelson Ave 1
+## 115                    Mount Vernon Ave &amp; Kennedy St to Prince St &amp; Union St 1
+## 116                    Mount Vernon Ave &amp; Kennedy St to Prince St &amp; Union St 1
+## 117                  New York Ave &amp; Hecht Ave NE to New Jersey Ave &amp; R St NW 1
+## 118                  New York Ave &amp; Hecht Ave NE to New Jersey Ave &amp; R St NW 1
+## 119                        Norfolk &amp; Rugby Ave to Battery Ln &amp; Trolley Trail 1
+## 120                        Norfolk &amp; Rugby Ave to Battery Ln &amp; Trolley Trail 1
+## 121             Philadelphia &amp; Maple Ave to Georgia Ave &amp; Piney Branch Rd NW 1
+## 122             Philadelphia &amp; Maple Ave to Georgia Ave &amp; Piney Branch Rd NW 1
+## 123                   Potomac &amp; Pennsylvania Ave SE to Florida Ave &amp; R St NW 1
+## 124                   Potomac &amp; Pennsylvania Ave SE to Florida Ave &amp; R St NW 1
+## 125                                 Potomac Ave &amp; 8th St SE to 6th &amp; H St NE 1
+## 126                                 Potomac Ave &amp; 8th St SE to 6th &amp; H St NE 1
+## 127                                   Van Ness Metro / UDC to 14th &amp; R St NW 1
+## 128                                   Van Ness Metro / UDC to 14th &amp; R St NW 1
+## 129                                   Vermont Ave &amp; I St NW to 6th &amp; H St NE 1
+## 130                                   Vermont Ave &amp; I St NW to 6th &amp; H St NE 1
+## 131                  Veterans Pl &amp; Pershing Dr  to Fenton St &amp; New York Ave  1
+## 132                  Veterans Pl &amp; Pershing Dr  to Fenton St &amp; New York Ave  1
+## 133                        Yuma St &amp; Tenley Circle NW to River Rd &amp; Landy Ln 1
+## 134                        Yuma St &amp; Tenley Circle NW to River Rd &amp; Landy Ln 1
+##           loc      lat      loc2      long
+## 1   start_lat 38.92285 start_lng -77.04252
+## 2     end_lat 38.91097   end_lng -77.00495
+## 3   start_lat 38.89828 start_lng -77.03973
+## 4     end_lat 38.90774   end_lng -77.07165
+## 5   start_lat 38.90939 start_lng -77.04873
+## 6     end_lat 38.89230   end_lng -77.04360
+## 7   start_lat 38.88432 start_lng -77.02601
+## 8     end_lat 38.89050   end_lng -77.01725
+## 9   start_lat 38.89828 start_lng -77.03973
+## 10    end_lat 38.89483   end_lng -76.98763
+## 11  start_lat 38.90864 start_lng -77.01237
+## 12    end_lat 38.90154   end_lng -77.04656
+## 13  start_lat 38.88510 start_lng -77.00230
+## 14    end_lat 38.89941   end_lng -77.01529
+## 15  start_lat 38.92320 start_lng -77.04764
+## 16    end_lat 38.89303   end_lng -77.02601
+## 17  start_lat 38.90509 start_lng -76.99410
+## 18    end_lat 38.89050   end_lng -77.01725
+## 19  start_lat 38.89054 start_lng -77.04938
+## 20    end_lat 38.91376   end_lng -77.02702
+## 21  start_lat 38.87869 start_lng -77.02305
+## 22    end_lat 38.89054   end_lng -77.04938
+## 23  start_lat 38.89745 start_lng -77.00989
+## 24    end_lat 38.87869   end_lng -77.02305
+## 25  start_lat 38.92039 start_lng -77.02567
+## 26    end_lat 38.89997   end_lng -76.99835
+## 27  start_lat 38.89786 start_lng -77.02697
+## 28    end_lat 38.93190   end_lng -77.03880
+## 29  start_lat 38.91376 start_lng -77.02702
+## 30    end_lat 38.90774   end_lng -77.07165
+## 31  start_lat 38.91684 start_lng -77.02806
+## 32    end_lat 38.91644   end_lng -77.06820
+## 33  start_lat 38.88249 start_lng -76.99012
+## 34    end_lat 38.90509   end_lng -76.99410
+## 35  start_lat 38.90043 start_lng -76.98825
+## 36    end_lat 38.92855   end_lng -77.03222
+## 37  start_lat 38.90366 start_lng -77.03174
+## 38    end_lat 38.91815   end_lng -77.00475
+## 39  start_lat 38.91295 start_lng -77.03183
+## 40    end_lat 38.92750   end_lng -76.99719
+## 41  start_lat 38.91902 start_lng -77.03445
+## 42    end_lat 38.88510   end_lng -77.00230
+## 43  start_lat 38.88732 start_lng -76.98357
+## 44    end_lat 38.90843   end_lng -77.02714
+## 45  start_lat 38.91265 start_lng -77.04183
+## 46    end_lat 38.91815   end_lng -77.00475
+## 47  start_lat 38.91881 start_lng -77.04157
+## 48    end_lat 38.87501   end_lng -77.00240
+## 49  start_lat 38.90036 start_lng -77.01211
+## 50    end_lat 38.87982   end_lng -77.03741
+## 51  start_lat 38.90036 start_lng -77.01211
+## 52    end_lat 38.87869   end_lng -77.02305
+## 53  start_lat 38.90864 start_lng -77.01237
+## 54    end_lat 38.90373   end_lng -76.98721
+## 55  start_lat 38.89963 start_lng -77.00325
+## 56    end_lat 38.89903   end_lng -77.03335
+## 57  start_lat 38.90373 start_lng -77.06753
+## 58    end_lat 38.91265   end_lng -77.04183
+## 59  start_lat 38.91647 start_lng -77.06823
+## 60    end_lat 38.93750   end_lng -77.03280
+## 61  start_lat 38.88637 start_lng -77.01770
+## 62    end_lat 38.91260   end_lng -77.01350
+## 63  start_lat 38.88996 start_lng -77.00035
+## 64    end_lat 38.90176   end_lng -77.05108
+## 65  start_lat 38.89050 start_lng -77.01725
+## 66    end_lat 38.90864   end_lng -77.02277
+## 67  start_lat 38.90001 start_lng -76.99859
+## 68    end_lat 38.88826   end_lng -77.04944
+## 69  start_lat 38.89997 start_lng -76.99835
+## 70    end_lat 38.90733   end_lng -77.01536
+## 71  start_lat 38.88345 start_lng -77.02174
+## 72    end_lat 38.89696   end_lng -77.00493
+## 73  start_lat 38.88345 start_lng -77.02174
+## 74    end_lat 38.87869   end_lng -77.02305
+## 75  start_lat 38.89728 start_lng -77.02219
+## 76    end_lat 38.93190   end_lng -77.03880
+## 77  start_lat 38.89743 start_lng -77.02227
+## 78    end_lat 38.93190   end_lng -77.03880
+## 79  start_lat 38.91272 start_lng -77.02215
+## 80    end_lat 38.88492   end_lng -77.00597
+## 81  start_lat 38.91272 start_lng -77.02215
+## 82    end_lat 38.89050   end_lng -77.01725
+## 83  start_lat 38.91272 start_lng -77.02215
+## 84    end_lat 38.87843   end_lng -77.03023
+## 85  start_lat 38.91272 start_lng -77.02215
+## 86    end_lat 38.89970   end_lng -77.00891
+## 87  start_lat 38.88998 start_lng -76.99522
+## 88    end_lat 38.90860   end_lng -77.03230
+## 89  start_lat 38.89727 start_lng -76.99475
+## 90    end_lat 38.91762   end_lng -77.01597
+## 91  start_lat 38.90864 start_lng -77.02277
+## 92    end_lat 38.88732   end_lng -76.98357
+## 93  start_lat 38.92285 start_lng -77.04252
+## 94    end_lat 38.89046   end_lng -76.98835
+## 95  start_lat 38.86578 start_lng -76.97840
+## 96    end_lat 38.86661   end_lng -76.98524
+## 97  start_lat 38.90372 start_lng -77.06274
+## 98    end_lat 38.89720   end_lng -76.98358
+## 99  start_lat 38.88701 start_lng -77.09526
+## 100   end_lat 38.89610   end_lng -77.04988
+## 101 start_lat 38.92748 start_lng -76.99718
+## 102   end_lat 38.92107   end_lng -77.03189
+## 103 start_lat 38.92787 start_lng -77.04336
+## 104   end_lat 38.91542   end_lng -77.01229
+## 105 start_lat 38.87869 start_lng -77.02305
+## 106   end_lat 38.90547   end_lng -77.00213
+## 107 start_lat 38.87872 start_lng -77.02301
+## 108   end_lat 38.93668   end_lng -77.02418
+## 109 start_lat 38.87872 start_lng -77.02300
+## 110   end_lat 38.90590   end_lng -77.03250
+## 111 start_lat 38.89623 start_lng -76.99279
+## 112   end_lat 38.87306   end_lng -76.97101
+## 113 start_lat 38.84129 start_lng -77.06309
+## 114   end_lat 38.82006   end_lng -77.05762
+## 115 start_lat 38.83308 start_lng -77.05982
+## 116   end_lat 38.80312   end_lng -77.04036
+## 117 start_lat 38.91560 start_lng -76.98368
+## 118   end_lat 38.91266   end_lng -77.01767
+## 119 start_lat 38.99060 start_lng -77.10020
+## 120   end_lat 38.99238   end_lng -77.10010
+## 121 start_lat 38.98128 start_lng -77.01134
+## 122   end_lat 38.96751   end_lng -77.02798
+## 123 start_lat 38.88030 start_lng -76.98620
+## 124   end_lat 38.91260   end_lng -77.01350
+## 125 start_lat 38.87674 start_lng -76.99447
+## 126   end_lat 38.89997   end_lng -76.99835
+## 127 start_lat 38.94456 start_lng -77.06391
+## 128   end_lat 38.91305   end_lng -77.03201
+## 129 start_lat 38.90114 start_lng -77.03445
+## 130   end_lat 38.89997   end_lng -76.99835
+## 131 start_lat 38.99744 start_lng -77.02389
+## 132   end_lat 38.98540   end_lng -77.02308
+## 133 start_lat 38.94618 start_lng -77.08059
+## 134   end_lat 38.96499   end_lng -77.10338</code></pre>
+<pre class="r"><code>{p &lt;- ggplot(d1, aes(x= long, y= lat, color = loc, shape = loc2)) + geom_point()# +geom_line(aes(group = trip, size = n, alpha=.1),color=&quot;grey&quot;)
+p}</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-23-1.png" width="672" /></p>
+<pre class="r"><code>hi &lt;- d %&gt;% filter(start_lat == end_lat &amp; end_lng == start_lng)
+
+hi &lt;- pivot_longer(hi, cols = c(2,4), names_to = &quot;s.e&quot;, values_to = &quot;lat&quot;) %&gt;% pivot_longer(cols = c(2,3), names_to = &quot;s.e2&quot;, values_to = &quot;long&quot;)
+
+r &lt;- hi %&gt;% 
+  group_by(trip) %&gt;% 
+  summarise(lng = max(lat), lat = max(long), n=n)</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;trip&#39;. You can override using the
+## `.groups` argument.</code></pre>
+<pre class="r"><code>r &lt;- r %&gt;% distinct_all()
+ggplot(r, aes(x= lng, y = lat, color = n)) + geom_point()</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-24-1.png" width="672" /></p>
+<div id="remove-round-trips" class="section level2">
+<h2>Remove round trips</h2>
+<pre class="r"><code>anti_join(d1, r)</code></pre>
+<pre><code>## Joining, by = c(&quot;trip&quot;, &quot;n&quot;, &quot;lat&quot;)</code></pre>
+<pre><code>## # A tibble: 10,598 × 6
+## # Groups:   trip [5,071]
+##    trip                                            n loc         lat loc2   long
+##    &lt;chr&gt;                                       &lt;int&gt; &lt;chr&gt;     &lt;dbl&gt; &lt;chr&gt; &lt;dbl&gt;
+##  1 10th &amp; E St NW to 10th &amp; G St NW                1 start_lat  38.9 star… -77.0
+##  2 10th &amp; E St NW to 10th &amp; G St NW                1 end_lat    38.9 end_… -77.0
+##  3 10th &amp; E St NW to 14th &amp; G St NW                1 start_lat  38.9 star… -77.0
+##  4 10th &amp; E St NW to 14th &amp; G St NW                1 end_lat    38.9 end_… -77.0
+##  5 10th &amp; E St NW to 14th &amp; Q St NW                1 start_lat  38.9 star… -77.0
+##  6 10th &amp; E St NW to 14th &amp; Q St NW                1 end_lat    38.9 end_… -77.0
+##  7 10th &amp; E St NW to 14th &amp; V St NW                1 start_lat  38.9 star… -77.0
+##  8 10th &amp; E St NW to 14th &amp; V St NW                1 end_lat    38.9 end_… -77.0
+##  9 10th &amp; E St NW to 15th &amp; East Capitol St NE     1 start_lat  38.9 star… -77.0
+## 10 10th &amp; E St NW to 15th &amp; East Capitol St NE     1 end_lat    38.9 end_… -77.0
+## # … with 10,588 more rows
+## # ℹ Use `print(n = ...)` to see more rows</code></pre>
+<pre class="r"><code>n &lt;- map_data %&gt;% filter(start_station_name != end_station_name) %&gt;% group_by(trip) %&gt;% #, start_lat, start_lng, end_lat, end_lng) %&gt;%
+  summarise(n=n(), start_lat = max(start_lat), end_lat = max(end_lat), start_lng = max(start_lng), end_lng = max(end_lng))
+# n %&gt;% group_by(trip) %&gt;% count()
+
+n &lt;- pivot_longer(n, cols = c(3,4), names_to = &quot;Position&quot;, values_to = &quot;Lat&quot;) %&gt;% pivot_longer(cols = c(3,4), names_to = &quot;l_pos&quot;, values_to = &quot;long&quot;)
+
+n &lt;- n %&gt;% filter((Position == &quot;start_lat&quot; &amp; l_pos == &quot;start_lng&quot;) | (Position == &quot;end_lat&quot; &amp; l_pos == &quot;end_lng&quot;))
+
+
+#ggplot(n, aes(x = Lat, y = long)) +geom_point() + geom_line(aes(color = trip))
+
+img &lt;- png::readPNG(&quot;map.png&quot;)
+img &lt;- readJPEG(&quot;map.jpg&quot;)
+p &lt;- ggplot(n, aes(x = Lat, y = long)) +
+  background_image(img) + geom_point(aes(color = Position)) + #geom_line(aes(group=trip, size = n), alpha = .03)
+     geom_path(aes(x = Lat, y = long, group = trip), alpha = .1,
+             arrow = arrow(length = unit(0.55, &quot;cm&quot;))) +
+  xlim(c(min(n$Lat), max(n$Lat))) +
+  ylim(c(min(n$long), max(n$long)))+
+  ggtitle(&quot;All rides in July 2022&quot;) + 
+  scale_color_manual(values=c(&quot;#0000ff&quot;, &quot;#0000ff&quot;)) + theme(legend.position=&quot;none&quot;)
+p</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-25-1.png" width="672" /></p>
+<pre class="r"><code>#png(&quot;r-graphics.png&quot;)
+print(p)</code></pre>
+<p><img src="/post/09_2_22_DC_Bike_files/figure-html/unnamed-chunk-25-2.png" width="672" /></p>
+<pre class="r"><code>#dev.off()
+#ggsave(p)</code></pre>
+<p>The image quality is abysmal. First, I need a higher quality map</p>
+</div>
+</div>

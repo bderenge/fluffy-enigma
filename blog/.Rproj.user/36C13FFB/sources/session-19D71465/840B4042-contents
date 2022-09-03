@@ -1,0 +1,438 @@
+---
+title: "DC Bike Share Analysis"
+subtitle: Ben Derenge | August 8, 2022
+width: 1200
+---
+
+# Load Packages
+
+```{r include=FALSE}
+(.packages())
+pacman::p_load(ggplot2, tidyr, dplyr, calendR, forcats, stringr, purrr, readr, tibble, lubridate, kableExtra, sf, mapview, osmdata, showtext, ggmap, rvest, plotly, ggpubr, jpeg)
+```
+
+Washington DC has bike station scattered around the city, allowing anyone find a nearby station, take a bike and ride to another station and drop it off. *Capital Bikeshare* has publicly available data sets from their website <https://ride.capitalbikeshare.com/system-data>
+
+There are dozens of data sets on their site, dating b ack to 2011. To begin, I picked a dataset from the first quarter of 2017.
+
+Let's take a look the data
+
+```{r}
+#| echo: false
+# set theme
+ggplot2::theme_set(ggplot2::theme_light())
+#ggplot2::theme_update(scale_color_manual(values=c("9F1861", "#EFE94B", "#631357")))
+# import data
+`2017Q1.capitalbikeshare.tripdata` <- read.csv("~/R/dc bikeshare/2017Q1-capitalbikeshare-tripdata.csv")
+bike <- `2017Q1.capitalbikeshare.tripdata`
+head(bike[,c(1,2,3,5,7,8,9)], 5)
+
+```
+
+We see each row is ride. We are given the following info about each ride:
+
+-   **Duration (minutes)** How many minutes long is the ride
+
+-   **Start.Date**
+
+-   **End.Date**
+
+-   **Start.station.number** Identifier
+
+-   **Start.station**
+
+-   **End.station.number** Identifier
+
+-   **End.station**
+
+-   **Bike.number** bike Identifier
+
+-   **Member.type** Casual or Member
+
+    Looking at the data available, I brainstormed some directions we can go with the data
+
+-   What stations are most/least frequently used?
+
+-   Time series analysis
+
+    -   Any daily patterns appear in the data
+
+    -   Different behaviors in different times of each day
+
+    -   Seasonal trends
+
+-   "Easy Questions"
+
+    -   How many bikes are in the data
+
+    -   How many rides are taken each day
+
+    -   How many rides per day on average
+
+    -   What proportion of rides are taken by members
+
+# Member Type
+
+```{r}
+#sum(bike$Duration)
+#hist(bike$Duration)
+
+table(bike$Member.type)
+
+ggplot(bike, aes(x= Member.type, fill = Member.type)) + geom_bar()
+#ggplot(bike, aes(x= Member.type, fill = Member.type)) + geom_bar()
+
+bike$dt <- date(as_datetime(bike$End.date))
+```
+
+From a simple aggregation, we see in Q1 of 2017 118,076 rides were taken by Casual users, and 528,434 by Members. This is a bit surprising to me
+
+Using the Lubridate package, I converted the date string into a date.
+
+```{r}
+#| include: false
+#aggregations
+
+#By date
+
+# bike %>%
+#   group_by(End.date) %>%
+#   summarize(trips = tally(End.date))
+
+
+date_agg <- bike %>% count(dt)
+#plot(x= date_agg$dt, y=date_agg$n)
+```
+
+```{r}
+mean(date_agg$n)
+ggplot(date_agg, aes(n)) + geom_histogram() + xlab("Daily Number of Rides")
+```
+
+This plot shows the distribution of the daily number of ride. It's a nice looking distribution, with a mean of 7104.5 rides per day.
+
+```{r}
+
+ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab("Number of Rides") + xlab("Date") 
+
+```
+
+This time series plot shows a lot of variability. Let's add a moving average to it.
+
+```{r}
+ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab("Number of Rides") + xlab("Date") + tidyquant::geom_ma(n=6)
+
+```
+
+Next, I thought to display the rider types on this plot.
+
+```{r}
+
+#aggrgate by date and member type
+#table(bike$Member.type)
+
+bike %>% count(Member.type)
+date_mem <- bike %>% count(dt, Member.type)
+
+#daily ride by member type
+ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line()
+
+```
+
+Generally, there are fewer Casuals riding than Member, which is expected as member outnumber casuals 4 to 1. On 3 days, casuals take rides than members. perhaps there was a promotion, or this is due to chance.
+
+Let's add moving averages to this plot
+
+```{r}
+ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line() +
+  tidyquant::geom_ma(n=6)
+
+```
+
+This plot look pretty messy, too much going. We could remove actual counts and only see the averages, or simply make the averages easier to see.
+
+Next, I want to make a heatmap to see the busiest day. Using the calendR package,
+
+```{r}
+#how many bikes
+n_distinct(bike$Bike.number)
+
+
+
+d <- as.vector(date_agg$n)
+
+#CalendR plot
+# calendR(year = 2017,
+#         #start = "S",
+#         start_date = "2017-01-01", # Custom start date
+#         end_date = "2017-04-01",
+#         #special.days = 1:91,
+#         special.days = rank(d),
+#         gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+#         special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+#         low.col = "white")   
+
+```
+
+```{r}
+calendR(year = 2017,
+        #start = "S",
+        start_date = "2017-01-01", # Custom start date
+        end_date = "2017-03-31",
+        #special.days = 1:91,
+        special.days = (90 * d / max(d))[1:90],
+        gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+        special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+        low.col = "white")   
+```
+
+```{r}
+## most/least poplar locations
+top_loc_end <- bike %>% count(End.station) %>% arrange(desc(n))
+head(top_loc_end,10)
+
+top_loc_start <- bike %>% count(Start.station) %>% arrange(desc(n))
+head(top_loc_start,10)
+```
+
+Columbus Circle / Union Station is the most popular starting and ending location.
+
+# Most Popular Trips
+
+```{r}
+bike$trip <- stringr::str_c(bike$Start.station, bike$End.station, sep = " to ")
+
+
+trips <- bike %>%
+  count(trip) %>% 
+  arrange(desc(n))
+
+head(trips)
+ # t <- bike %>% filter(End.station == "Jefferson Dr & 14th St SW" & Start.station == "Jefferson Dr & 14th St SW") %>% arrange(desc(Duration) )
+ # 
+ # head(t[,c(1,2,3,5,7,9)],5)
+```
+
+The most common trip has the same start and end stations: Jefferson Dr. and 14th St SW.
+
+```{r}
+ # t <- bike %>% filter(End.station == "Jefferson Dr & 14th St SW" & Start.station == "Jefferson Dr & 14th St SW") %>% arrange(Duration )
+ # 
+ # head(t[,c(1,2,3,5,7,9)],5)
+```
+
+# All of 2017
+
+Let's add 3 more data sets from the other 3 quarter of 2017.
+
+```{r}
+q2 <- read.csv("~/R/dc bikeshare/2017Q2-capitalbikeshare-tripdata.csv")
+
+q3 <- read.csv("~/R/dc bikeshare/2017Q3-capitalbikeshare-tripdata.csv")
+
+q4 <- read.csv("~/R/dc bikeshare/2017Q4-capitalbikeshare-tripdata.csv")
+
+all_data <- bind_rows(`2017Q1.capitalbikeshare.tripdata`,q2,q3,q4)
+
+all_data$dt <- date(as_datetime(all_data$End.date))
+
+
+```
+
+Here are the same plots as above with the extra dates
+
+```{r}
+ggplot(date_agg, aes(n)) + geom_histogram() + xlab("Daily Number of Rides")
+date_agg <- all_data %>% count(dt)
+#plot(x= date_agg$dt, y=date_agg$n)
+ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab("Number of Rides") + xlab("Date") 
+
+ggplot(date_agg, aes(x = dt, y = n)) + geom_point() + geom_line() + ylab("Number of Rides") + xlab("Date") + tidyquant::geom_ma(n=6)
+
+date_mem <- all_data %>% count(dt, Member.type)
+
+#daily ride by member type
+ggplot(date_mem, aes(x = dt, y = n , color = Member.type)) + geom_point(size=2) + geom_line() +ylab("Daily Number of Rides") + xlab("Date")
+
+
+```
+
+The plot above has a lot of information to interpret. It makes me want to analyze the distributions of members vs casuals.
+
+```{r}
+ggplot(date_mem, aes(x=n, fill=Member.type)) + geom_histogram(alpha=.6, position = "identity") + xlab("Number of Daily Rides")
+
+date_mem %>% group_by(Member.type) %>% summarise(Mean = mean(n), "Standard Deviation" = sd(n))
+```
+
+How many rides are taken each month?
+
+```{r}
+bar <- all_data %>% 
+  group_by(month.name[month(dt)]) %>%
+  count(month(dt)) %>%
+  rename(Month = "month.name[month(dt)]", M = "month(dt)") %>%
+  arrange(M) %>%
+  select(Month,n)
+bar
+
+bar$f <- factor(bar$Month, levels = bar$Month)
+ggplot(bar, aes(x=f, y=n, fill = n)) + geom_col() + theme(axis.text.x=element_text(angle=60, hjust=1)) + xlab("Month") + ylab("Number of Rides") + scale_fill_continuous(high = "#132B43", low = "#56B1F7")
+```
+
+This plot displays the seasonal trend in the data. The summer months see the most rides and the winter months see the least
+
+# Calendar
+
+```{r}
+d <- as.vector(date_agg$n)
+
+# calendR(year = 2017,
+#         #start = "S",
+#         start_date = "2017-01-01", # Custom start date
+#         end_date = "2018-01-01",
+#         #special.days = 1:91,
+#         special.days =1:366,#nrow(date_mem) * d / max(d),
+#         gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+#         special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+#         low.col = "white")   
+
+calendR(year = 2017,
+        #start = "S",
+        start_date = "2017-01-01", # Custom start date
+        end_date = "2018-01-01",
+        #special.days = 1:91,
+        special.days =nrow(date_agg) * d / max(d),
+        gradient = TRUE,      # Set gradient = TRUE to create the heatmap
+        special.col = rgb(.5, 0, 1, alpha = 0.6), # Color of the gradient for the highest value
+        low.col = "white")   
+
+```
+
+# Ride Durations
+
+Let's look at how long each ride takes
+
+```{r}
+
+#ggplot(all_data, aes(x=dt, y= Duration)) + geom_point() # takes a long time
+# average duration by date
+duration <- all_data %>%
+  group_by(dt) %>%
+  summarize(length = mean(Duration))
+
+ggplot(duration, aes(x = dt, y = length)) + geom_point() + geom_line() + ylab("Length of Rides") + xlab("Date")
+
+
+```
+
+Perhaps rides are also longer on average during the summer summer months.
+
+```{r}
+
+bar <- duration %>% 
+  group_by(month.name[month(dt)]) %>% 
+  summarise(average_length = mean(length)) %>% 
+  rename(Month = "month.name[month(dt)]") %>% 
+  mutate(Month = factor(Month, levels = month.name)) %>%
+  arrange(Month)
+
+bar
+
+ggplot(bar, aes(x=Month, y=average_length, fill = average_length)) + geom_col() + theme(axis.text.x=element_text(angle=60, hjust=1)) + xlab("Month") + ylab("Average Lenght of Rides (minutes)") + scale_fill_continuous(high = "#132B43", low = "#56B1F7")
+```
+
+# Mapping
+
+The more recent data sets include latitude and longitude of the station. Let's try some new packages.
+
+```{r}
+map_data <- read.csv("~/R/dc bikeshare/202207-capitalbikeshare-tripdata.csv")
+map_data$ended_at <- date(as_datetime(map_data$ended_at))
+map_data <- map_data %>% filter(ended_at == "2022-07-09")
+#393683 rows, lets aggregate by trip
+#combine start and end
+map_data$trip <- str_c(map_data$start_station_name, " to ", map_data$end_station_name)
+
+#map_data %>% filter(!(is.na(start_station_id)))
+map_data <- map_data %>% drop_na()
+d <- map_data %>% group_by(trip, start_lat, start_lng, end_lat, end_lng) %>% summarise(n=n())
+
+
+ d1<- d %>% pivot_longer(cols = c(2,4),names_to = "loc", values_to = "lat") %>% 
+  pivot_longer(cols = c(2,3), names_to = "loc2", values_to = "long")
+
+d1 <- d1 %>%  filter((loc == "start_lat" & loc2 == "start_lng") | (loc == "end_lat" & loc2 == "end_lng"))
+
+
+p <- ggplot(d1 %>% filter(n >10), aes(x= long, y= lat, size=.1, color = loc, shape = loc2)) + geom_point() +geom_line(aes(group = trip, size = n, alpha=.1),color="grey")
+ p
+ #ggplotly(p)
+
+max(map_data$start_lat)
+min(map_data$start_lat)
+
+max(map_data$start_lng)
+min(map_data$start_lng)
+
+
+```
+
+```{r}
+d1 %>% group_by(trip) %>% count()
+
+drop_na(left_join(trips, d1, by = c("trip", "n")))
+{p <- ggplot(d1, aes(x= long, y= lat, color = loc, shape = loc2)) + geom_point()# +geom_line(aes(group = trip, size = n, alpha=.1),color="grey")
+p}
+
+
+```
+
+```{r}
+hi <- d %>% filter(start_lat == end_lat & end_lng == start_lng)
+
+hi <- pivot_longer(hi, cols = c(2,4), names_to = "s.e", values_to = "lat") %>% pivot_longer(cols = c(2,3), names_to = "s.e2", values_to = "long")
+
+r <- hi %>% 
+  group_by(trip) %>% 
+  summarise(lng = max(lat), lat = max(long), n=n)
+r <- r %>% distinct_all()
+ggplot(r, aes(x= lng, y = lat, color = n)) + geom_point()
+       
+       
+```
+
+## Remove round trips
+
+```{r}
+
+anti_join(d1, r)
+
+n <- map_data %>% filter(start_station_name != end_station_name) %>% group_by(trip) %>% #, start_lat, start_lng, end_lat, end_lng) %>%
+  summarise(n=n(), start_lat = max(start_lat), end_lat = max(end_lat), start_lng = max(start_lng), end_lng = max(end_lng))
+# n %>% group_by(trip) %>% count()
+
+n <- pivot_longer(n, cols = c(3,4), names_to = "Position", values_to = "Lat") %>% pivot_longer(cols = c(3,4), names_to = "l_pos", values_to = "long")
+
+n <- n %>% filter((Position == "start_lat" & l_pos == "start_lng") | (Position == "end_lat" & l_pos == "end_lng"))
+
+
+#ggplot(n, aes(x = Lat, y = long)) +geom_point() + geom_line(aes(color = trip))
+
+img <- png::readPNG("map.png")
+img <- readJPEG("map.jpg")
+p <- ggplot(n, aes(x = Lat, y = long)) +
+  background_image(img) + geom_point(aes(color = Position)) + #geom_line(aes(group=trip, size = n), alpha = .03)
+     geom_path(aes(x = Lat, y = long, group = trip), alpha = .1,
+             arrow = arrow(length = unit(0.55, "cm"))) +
+  xlim(c(min(n$Lat), max(n$Lat))) +
+  ylim(c(min(n$long), max(n$long)))+
+  ggtitle("All rides in July 2022") + 
+  scale_color_manual(values=c("#0000ff", "#0000ff")) + theme(legend.position="none")
+p
+#png("r-graphics.png")
+print(p)
+#dev.off()
+#ggsave(p)
+```
+The image quality is abysmal. First, I need a higher quality map

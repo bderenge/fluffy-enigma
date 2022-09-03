@@ -1,0 +1,10 @@
+"0","ggplot2::theme_update(scale_color_manual(values=c(""9F1861"", ""#EFE94B"", ""#631357"")))
+"
+"1","[1m[33mError[39m in [38;5;232m`merge_element()`[39m:[22m
+[33m![39m No method for merging ScaleDiscrete into element_line
+Backtrace:
+[90m 1. [39mggplot2::theme_update(...)
+[90m 3. [39mggplot2:::`+.gg`(theme_get(), theme(...))
+[90m 4. [39mggplot2:::add_theme(e1, e2, e2name)
+[90m 6. [39m[38;5;232m[1m[94mggplot2:::merge_element.default([38;5;232m[22m[39mt2[[item]], t1[[item]][38;5;232m[1m[94m)[38;5;232m[22m[39m
+"
